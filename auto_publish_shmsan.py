@@ -68,7 +68,7 @@ from shmsan_news_bot import (
 #  الأخبار فوراً (status=published). تُشغَّل عبر cron كل عدة دقائق.
 # ══════════════════════════════════════════════════════════════════════
 
-SELECTED_FEEDS = {
+PAUSED_SELECTED_FEEDS = {
     RSS_ADEN_TM_FULL_URL: RSS_ADEN_TM_FULL_CATEGORY,
     # 🆕 فيد الجزيرة نت اليمن (مفلتَر تلقائياً داخل apply_full_extraction —
     # أي خبر ليس عن اليمن فعلياً يُستبعد قبل النشر):
@@ -76,6 +76,7 @@ SELECTED_FEEDS = {
     # ⏸️ المساء برس مستبعد مؤقتاً — أعد هذا السطر لتفعيله من جديد:
     # RSS_MASA_URL: RSS_MASA_CATEGORY,
 }
+SELECTED_FEEDS = {}
 
 # 🚫 أقسام مستبعدة كلياً من النشر التلقائي (تبقى متاحة بالوضع التفاعلي
 # اليدوي بـjanoub_news_bot.py كما هي، هذا الاستبعاد خاص بالسكربت التلقائي فقط)
