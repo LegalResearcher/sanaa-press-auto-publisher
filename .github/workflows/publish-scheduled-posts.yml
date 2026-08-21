@@ -1,0 +1,26 @@
+name: نشر الأخبار المجدولة
+
+on:
+  schedule:
+    - cron: "*/20 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: سحب الكود
+        uses: actions/checkout@v4
+      - name: تجهيز Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: نشر الأخبار المستحقة
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node publish_scheduled_posts.mjs
