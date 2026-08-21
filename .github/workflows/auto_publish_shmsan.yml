@@ -1,0 +1,32 @@
+name: نشر تلقائي - صنعاء برس
+
+on:
+  schedule:
+    # كل 20 دقيقة
+    - cron: "*/20 * * * *"
+  workflow_dispatch: {}   # يسمح بتشغيل يدوي فوري من تبويب Actions للاختبار
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: سحب الكود
+        uses: actions/checkout@v4
+
+      - name: تجهيز بايثون
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"   # يخزّن المكتبات المثبّتة مؤقتاً لتسريع التشغيلات القادمة
+
+      - name: تثبيت المكتبات
+        run: pip install -r requirements.txt
+
+      - name: تشغيل بوت النشر
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
+        run: python auto_publish_shmsan.py
