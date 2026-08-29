@@ -1,0 +1,30 @@
+name: معاينة نشر X - صنعاء برس
+
+on:
+  workflow_run:
+    workflows: ["نشر تلقائي - صنعاء برس"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    # لا يُنفّذ إلا بعد نجاح نشر صنعاء برس، أو عند تشغيله يدوياً للمعاينة.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: سحب الكود
+        uses: actions/checkout@v4
+      - name: تجهيز Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: استخراج معاينة العنوان والرابط فقط
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          WORKFLOW_RUN_CREATED_AT: ${{ github.event.workflow_run.created_at }}
+        run: python scripts/x_preview.py

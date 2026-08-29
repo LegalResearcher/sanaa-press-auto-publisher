@@ -1,0 +1,38 @@
+name: نشر X - صنعاء برس
+
+on:
+  workflow_run:
+    workflows: ["نشر تلقائي - صنعاء برس"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      live_publish:
+        description: "تشغيل النشر الفعلي بعد ربط OAuth ومراجعة الحساب"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  publish-to-x:
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.live_publish == true) || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && vars.X_POSTING_ENABLED == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: سحب الكود
+        uses: actions/checkout@v4
+      - name: تجهيز Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: نشر العنوان والرابط فقط في X
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_POSTING_ENABLED: ${{ vars.X_POSTING_ENABLED || 'false' }}
+          WORKFLOW_RUN_CREATED_AT: ${{ github.event.workflow_run.created_at }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: python scripts/publish_to_x.py
