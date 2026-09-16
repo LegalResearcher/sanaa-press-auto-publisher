@@ -300,7 +300,7 @@ def run():
             seed_views(post_id)
             canonical_url = build_canonical_url(record["slug"], record["published_at"])
 
-            if send_to_telegram(record["title"], canonical_url):
+            if send_to_telegram(record["title"], canonical_url, record.get("cover_image")):
                 log.info("  📢 أُرسل لتليجرام")
 
             log_discovery_ready([canonical_url])

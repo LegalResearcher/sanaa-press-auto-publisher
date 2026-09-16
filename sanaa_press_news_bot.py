@@ -441,7 +441,7 @@ SYSTEM_LOGS_ALERT_THRESHOLD = 50_000  # سجل — حد التنبيه لكل م
 # يُبنى عبر build_canonical_url() بنفس صيغة الموقع: /YYYY/MM/DD/slug
 
 
-def send_to_telegram(title: str, article_url: str) -> bool:
+def send_to_telegram(title: str, article_url: str, image_url: Optional[str] = None) -> bool:
     if not TELEGRAM_ENABLED or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHANNEL_ID:
         return False
     safe_title = html.escape(title, quote=False)
@@ -451,12 +451,21 @@ def send_to_telegram(title: str, article_url: str) -> bool:
         f"📲 تابعونا على:  ⤵\n\n"
         f"✅ تيليجرام: https://t.me/{TELEGRAM_CHANNEL_ID.lstrip('@')}"
     )
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHANNEL_ID, "text": text, "parse_mode": "HTML", "link_preview_options": {"is_disabled": False}}
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto" if image_url else f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": TELEGRAM_CHANNEL_ID, "caption": text, "photo": image_url, "parse_mode": "HTML"} if image_url else {"chat_id": TELEGRAM_CHANNEL_ID, "text": text, "parse_mode": "HTML", "link_preview_options": {"is_disabled": False}}
     try:
         r = requests.post(url, json=payload, timeout=REQUEST_TIMEOUT)
         if r.status_code == 200:
             return True
+        if image_url:
+            log.warning(f"  ⚠️  تعذّر إرسال صورة تيليجرام، ستُرسل الرسالة بدون صورة [{r.status_code}]")
+            fallback = requests.post(
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                json={"chat_id": TELEGRAM_CHANNEL_ID, "text": text, "parse_mode": "HTML", "link_preview_options": {"is_disabled": False}},
+                timeout=REQUEST_TIMEOUT,
+            )
+            if fallback.status_code == 200:
+                return True
         log.warning(f"  ⚠️  فشل إرسال تليجرام [{r.status_code}]: {r.text[:200]}")
         return False
     except requests.RequestException as e:
@@ -4200,7 +4209,7 @@ def main():
                 save_pending_scheduled(pending)
                 log.info("  ⏸️  تيليجرام: مؤجَّل لحين تأكيد النشر الفعلي بجلسة قادمة")
             else:
-                if send_to_telegram(record["title"], canonical_url):
+                if send_to_telegram(record["title"], canonical_url, record.get("cover_image")):
                     log.info("  📢 أُرسل لتليجرام")
 
                 log_discovery_ready([canonical_url])
