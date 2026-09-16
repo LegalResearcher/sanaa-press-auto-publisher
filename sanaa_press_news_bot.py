@@ -444,14 +444,15 @@ SYSTEM_LOGS_ALERT_THRESHOLD = 50_000  # سجل — حد التنبيه لكل م
 def send_to_telegram(title: str, article_url: str) -> bool:
     if not TELEGRAM_ENABLED or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHANNEL_ID:
         return False
+    safe_title = html.escape(title, quote=False)
+    safe_url = html.escape(article_url, quote=True)
     text = (
-        f"{title}\n\n"
-        f'أقرأ التفاصيل من "صنعاء برس": {article_url}\n\n'
+        f'<a href="{safe_url}"><b>{safe_title}</b></a>\n\n'
         f"📲 تابعونا على:  ⤵\n\n"
         f"✅ تيليجرام: https://t.me/{TELEGRAM_CHANNEL_ID.lstrip('@')}"
     )
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHANNEL_ID, "text": text}
+    payload = {"chat_id": TELEGRAM_CHANNEL_ID, "text": text, "parse_mode": "HTML", "link_preview_options": {"is_disabled": True}}
     try:
         r = requests.post(url, json=payload, timeout=REQUEST_TIMEOUT)
         if r.status_code == 200:
