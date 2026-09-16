@@ -452,7 +452,7 @@ def send_to_telegram(title: str, article_url: str) -> bool:
         f"✅ تيليجرام: https://t.me/{TELEGRAM_CHANNEL_ID.lstrip('@')}"
     )
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHANNEL_ID, "text": text, "parse_mode": "HTML", "link_preview_options": {"is_disabled": True}}
+    payload = {"chat_id": TELEGRAM_CHANNEL_ID, "text": text, "parse_mode": "HTML", "link_preview_options": {"is_disabled": False}}
     try:
         r = requests.post(url, json=payload, timeout=REQUEST_TIMEOUT)
         if r.status_code == 200:
