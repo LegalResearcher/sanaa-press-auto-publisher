@@ -441,13 +441,16 @@ SYSTEM_LOGS_ALERT_THRESHOLD = 50_000  # سجل — حد التنبيه لكل م
 # يُبنى عبر build_canonical_url() بنفس صيغة الموقع: /YYYY/MM/DD/slug
 
 
-def send_to_telegram(title: str, article_url: str, image_url: Optional[str] = None) -> bool:
+def send_to_telegram(title: str, article_url: str, image_url: Optional[str] = None, excerpt: Optional[str] = None) -> bool:
     if not TELEGRAM_ENABLED or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHANNEL_ID:
         return False
     safe_title = html.escape(title, quote=False)
     safe_url = html.escape(article_url, quote=True)
+    summary = html.escape((excerpt or "").strip()[:650], quote=False)
+    summary_block = f'<blockquote expandable>{summary}</blockquote>\n\n' if summary else ""
     text = (
         f'<a href="{safe_url}"><b>{safe_title}</b></a>\n\n'
+        f"{summary_block}"
         f"📲 تابعونا على:  ⤵\n\n"
         f"✅ تيليجرام: https://t.me/{TELEGRAM_CHANNEL_ID.lstrip('@')}"
     )
@@ -4209,7 +4212,7 @@ def main():
                 save_pending_scheduled(pending)
                 log.info("  ⏸️  تيليجرام: مؤجَّل لحين تأكيد النشر الفعلي بجلسة قادمة")
             else:
-                if send_to_telegram(record["title"], canonical_url, record.get("cover_image")):
+                if send_to_telegram(record["title"], canonical_url, record.get("cover_image"), record.get("excerpt")):
                     log.info("  📢 أُرسل لتليجرام")
 
                 log_discovery_ready([canonical_url])
