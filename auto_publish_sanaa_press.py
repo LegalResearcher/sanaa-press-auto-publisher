@@ -47,6 +47,7 @@ from sanaa_press_news_bot import (
     save_blocked_link,
     collect_recent_items,
     remove_duplicate_news,
+    remove_content_duplicate_news,
     apply_full_extraction,
     rewrite_article,
     rewrite_title_only,
@@ -179,6 +180,13 @@ def run():
         log.info("لا يوجد أخبار جديدة حالياً بعد الاستبعاد.")
         return
 
+    # طبقة حصاد اليوم: بعد استخراج المتن الكامل، افحص التشابه الدلالي للمحتوى
+    # مع الكيانات المشتركة والتقارب الزمني قبل إعادة الصياغة والنشر.
+    new_items = remove_content_duplicate_news(new_items, history_items=recent_published)
+    if not new_items:
+        log.info("لا يوجد أخبار جديدة حالياً بعد فحص تشابه المحتوى.")
+        return
+
     ok = fail = skipped = duplicate_count = 0
 
     for it in new_items:
@@ -294,8 +302,18 @@ def run():
         if post_id:
             ok += 1
             log.info(f"  ✅ نُشر: {record['title'][:60]}")
-            log_published_title(record["title"], record["created_at"], embedding=it.get("_title_embedding"))
-            save_published_title_to_db(record["title"], record["created_at"], embedding=it.get("_title_embedding"))
+            log_published_title(
+                record["title"], record["created_at"],
+                embedding=it.get("_title_embedding"),
+                content_embedding=it.get("_content_embedding"),
+                entities=it.get("_dedup_entities"),
+            )
+            save_published_title_to_db(
+                record["title"], record["created_at"],
+                embedding=it.get("_title_embedding"),
+                content_embedding=it.get("_content_embedding"),
+                entities=it.get("_dedup_entities"),
+            )
             save_blocked_link(it["link"])  # منع إعادة النشر مستقبلاً حتى لو حُذف الخبر من الموقع
             seed_views(post_id)
             canonical_url = build_canonical_url(record["slug"], record["published_at"])

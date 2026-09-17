@@ -1786,6 +1786,74 @@ def remove_duplicate_news(
     return kept
 
 
+# طبقة مطابقة متن الخبر، وفق منطق حصاد اليوم: تشابه دلالي للمحتوى مع كيان
+# مشترك وتقارب زمني، لتغطية الحالات التي تُعاد فيها صياغة العنوان بشكل كبير.
+CONTENT_DUPLICATE_EMBEDDING_THRESHOLD = 0.80
+CONTENT_DUPLICATE_TIME_WINDOW_MINUTES = 180
+KNOWN_DEDUP_ENTITIES = (
+    "صنعاء", "اليمن", "السعودية", "التحالف", "إسرائيل", "غزة", "الضفة",
+    "إيران", "أمريكا", "واشنطن", "ترامب", "مأرب", "عدن", "الحديدة",
+    "مضيق هرمز", "البحر الأحمر", "مجلس الأمن", "إنفانتينو", "ميسي",
+)
+
+
+def _extract_dedup_entities(text: str) -> set[str]:
+    normalized = _normalize_title_for_dedup(text)
+    return {
+        _normalize_title_for_dedup(entity)
+        for entity in KNOWN_DEDUP_ENTITIES
+        if _normalize_title_for_dedup(entity) in normalized
+    }
+
+
+def get_content_embedding(raw_body: str) -> Optional[list[float]]:
+    return get_title_embedding((raw_body or "")[:4000]) if raw_body else None
+
+
+def remove_content_duplicate_news(
+    items: list[dict], history_items: Optional[list[dict]] = None,
+) -> list[dict]:
+    kept_items: list[dict] = []
+    kept_embeddings: list[Optional[list[float]]] = []
+    kept_entities: list[set[str]] = []
+    kept_dates: list[Optional[datetime]] = []
+    for history in history_items or []:
+        kept_embeddings.append(history.get("content_embedding"))
+        kept_entities.append(set(history.get("entities") or []))
+        kept_dates.append(history.get("pub_date"))
+    history_count = len(kept_dates)
+    time_window = timedelta(minutes=CONTENT_DUPLICATE_TIME_WINDOW_MINUTES)
+    for item in items:
+        body = item.get("raw_body", "")
+        entities = _extract_dedup_entities(f"{item.get('title', '')} {body}")
+        embedding = get_content_embedding(body) if entities else None
+        item["_content_embedding"] = embedding
+        item["_dedup_entities"] = list(entities)
+        duplicate = False
+        pub_date = item.get("pub_date")
+        if embedding and entities and pub_date is not None:
+            for index, existing_date in enumerate(kept_dates):
+                if existing_date is None or abs(pub_date - existing_date) > time_window:
+                    continue
+                if not (entities & kept_entities[index]):
+                    continue
+                existing_embedding = kept_embeddings[index]
+                if existing_embedding and _cosine_similarity(embedding, existing_embedding) >= CONTENT_DUPLICATE_EMBEDDING_THRESHOLD:
+                    duplicate = True
+                    source = "منشور سابقاً" if index < history_count else "بنفس الدفعة"
+                    log.info(f"  🔁 استبعاد تكرار متن الخبر ({source}): {item.get('title', '')[:70]}")
+                    break
+        if duplicate:
+            continue
+        kept_items.append(item)
+        kept_embeddings.append(embedding)
+        kept_entities.append(entities)
+        kept_dates.append(pub_date)
+    if len(kept_items) < len(items):
+        log.info(f"🧹 استُبعد {len(items) - len(kept_items)} خبر مكرر اعتماداً على متن الخبر.")
+    return kept_items
+
+
 # ══════════════════════════════════════════════════════════════════════
 #  🗄️  Supabase REST API
 # ══════════════════════════════════════════════════════════════════════
@@ -1990,7 +2058,7 @@ def _load_and_prune_published_titles_log(max_age_hours: int) -> list[dict]:
         if pub_date < cutoff:
             continue  # عمره تجاوز 24 ساعة — يُستبعد من السجل نهائياً
         kept_raw.append(row)
-        kept_out.append({"title": row["title"], "pub_date": pub_date, "embedding": row.get("embedding")})
+        kept_out.append({"title": row["title"], "pub_date": pub_date, "embedding": row.get("embedding"), "content_embedding": row.get("content_embedding"), "entities": row.get("entities")})
 
     if len(kept_raw) != len(raw):
         try:
@@ -2004,7 +2072,7 @@ def _load_and_prune_published_titles_log(max_age_hours: int) -> list[dict]:
     return kept_out
 
 
-def log_published_title(title: str, pub_date_iso: str, embedding: Optional[list[float]] = None) -> None:
+def log_published_title(title: str, pub_date_iso: str, embedding: Optional[list[float]] = None, content_embedding: Optional[list[float]] = None, entities: Optional[list[str]] = None) -> None:
     """يُضاف كل خبر يُنشر فعلاً لسجل محلي دائم (بدون أي طلب لـSupabase)،
     يُستخدم لاحقاً لمنع تكرار نفس الخبر من فيد آخر عبر تشغيلات مختلفة.
 
@@ -2027,7 +2095,7 @@ def log_published_title(title: str, pub_date_iso: str, embedding: Optional[list[
         if pub_date >= cutoff:
             kept_raw.append(row)
 
-    kept_raw.append({"title": title, "pub_date": pub_date_iso, "embedding": embedding})
+    kept_raw.append({"title": title, "pub_date": pub_date_iso, "embedding": embedding, "content_embedding": content_embedding, "entities": entities})
 
     try:
         import os
@@ -2072,7 +2140,7 @@ def get_recent_published_titles_from_db(
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
     url = f"{SUPABASE_URL}/rest/v1/{BOT_PUBLISHED_TITLES_TABLE}"
     params = {
-        "select": "title,pub_date,embedding",
+        "select": "title,pub_date,embedding,content_embedding,entities",
         "pub_date": f"gte.{cutoff}",
         "order": "pub_date.desc",
         "limit": "500",
@@ -2100,6 +2168,8 @@ def get_recent_published_titles_from_db(
             "title": row.get("title", ""),
             "pub_date": pub_date,
             "embedding": row.get("embedding"),
+            "content_embedding": row.get("content_embedding"),
+            "entities": row.get("entities"),
         })
     if out:
         log.info(f"📋 تم جلب {len(out)} عنوان منشور من سجل Supabase الدائم (آخر {hours} ساعة)")
@@ -2108,6 +2178,7 @@ def get_recent_published_titles_from_db(
 
 def save_published_title_to_db(
     title: str, pub_date_iso: str, embedding: Optional[list[float]] = None,
+    content_embedding: Optional[list[float]] = None, entities: Optional[list[str]] = None,
 ) -> None:
     """يضيف الخبر المنشور لجدول Supabase الدائم (بجانب السجل المحلي، وليس
     بدلاً عنه)، ليدوم بين تشغيلات GitHub Actions المختلفة. لا يوقف البوت
@@ -2118,7 +2189,7 @@ def save_published_title_to_db(
     try:
         r = requests.post(
             url, headers=sb_headers(),
-            json={"title": title, "pub_date": pub_date_iso, "embedding": embedding},
+            json={"title": title, "pub_date": pub_date_iso, "embedding": embedding, "content_embedding": content_embedding, "entities": entities},
             timeout=REQUEST_TIMEOUT,
         )
         if r.status_code not in (200, 201):
