@@ -95,8 +95,8 @@ SELECTED_FEEDS = {
     # فيد قسم "المحافظات المحتلة" بوكالة الصحافة اليمنية — مفعّل، وتُنشر
     # أخباره بقسم "أخبار وتقارير" ثابتاً.
     RSS_YPAGENCY_OCCUPIED_GOVERNORATES_URL: RSS_YPAGENCY_OCCUPIED_GOVERNORATES_CATEGORY,
-    # فيد الاتحاد برس — مفعّل، وتُنشر أخباره بقسم "أخبار وتقارير" ثابتاً.
-    RSS_ALITTIHAD_PRESS_URL: RSS_ALITTIHAD_PRESS_CATEGORY,
+    # ⏸️ الاتحاد برس مستبعد مؤقتاً من النشر التلقائي — يبقى متاحاً في
+    # الوضع اليدوي/الاستخراج الكامل عبر sanaa_press_news_bot.py.
     # ⏸️ الجزيرة نت اليمن مستبعد بطلب المستخدم — أعد هذا السطر لتفعيله من جديد:
     # RSS_ALJAZEERA_YEMEN_URL: RSS_ALJAZEERA_YEMEN_CATEGORY,
     # ⏸️ المساء برس مستبعد مؤقتاً — أعد هذا السطر لتفعيله من جديد:
