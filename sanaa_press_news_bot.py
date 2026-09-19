@@ -122,6 +122,11 @@ RSS_YPAGENCY_ANALYSIS_CATEGORY = "أخبار وتقارير"
 RSS_YPAGENCY_OCCUPIED_GOVERNORATES_URL = "https://www.ypagency.net/category/%d8%a7%d9%84%d9%85%d8%ad%d8%a7%d9%81%d8%b8%d8%a7%d8%aa-%d8%a7%d9%84%d9%85%d8%ad%d8%aa%d9%84%d8%a9/feed"
 RSS_YPAGENCY_OCCUPIED_GOVERNORATES_CATEGORY = "أخبار وتقارير"
 
+# رابط RSS لفيد "الاتحاد برس" — تُنشر أخباره في صنعاء برس ضمن قسم
+# "أخبار وتقارير"، مع تطبيق مسار الاستخراج الكامل عند اختيار الوضع الكامل.
+RSS_ALITTIHAD_PRESS_URL = "https://alittihadpress.com/rss.php?topic=1"
+RSS_ALITTIHAD_PRESS_CATEGORY = "أخبار وتقارير"
+
 # رابط RSS الحي العام لموقع الجزيرة نت (aljazeera.net) — نفس منطق ypagency
 # بالسحب والاستخراج الكامل، لكن يفتح كل رابط فعلياً عبر extract_article ليجلب
 # النص الكامل من صفحة الخبر نفسها.
@@ -4017,13 +4022,15 @@ def main():
     elif extraction_mode == "3":
         selected_feeds = {RSS_MASA_URL: RSS_MASA_CATEGORY}
     else:  # "1" — استخراج كامل: فيدات ypagency (اليمن/عالمية/تقارير/تحليلات/
-        # المحافظات المحتلة) + فيد الجزيرة (اليمن) + فيد المساء برس معاً
+        # المحافظات المحتلة) + الاتحاد برس + فيد الجزيرة (اليمن) + المساء برس
+        # معاً.
         selected_feeds = {
             RSS_YPAGENCY_YEMEN_URL: RSS_YPAGENCY_YEMEN_CATEGORY,
             RSS_YPAGENCY_INTL_URL: RSS_YPAGENCY_INTL_CATEGORY,
             RSS_YPAGENCY_REPORTS_URL: RSS_YPAGENCY_REPORTS_CATEGORY,
             RSS_YPAGENCY_ANALYSIS_URL: RSS_YPAGENCY_ANALYSIS_CATEGORY,
             RSS_YPAGENCY_OCCUPIED_GOVERNORATES_URL: RSS_YPAGENCY_OCCUPIED_GOVERNORATES_CATEGORY,
+            RSS_ALITTIHAD_PRESS_URL: RSS_ALITTIHAD_PRESS_CATEGORY,
             RSS_ALJAZEERA_YEMEN_URL: RSS_ALJAZEERA_YEMEN_CATEGORY,
             RSS_MASA_URL: RSS_MASA_CATEGORY,
         }

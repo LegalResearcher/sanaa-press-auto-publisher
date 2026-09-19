@@ -30,6 +30,8 @@ from sanaa_press_news_bot import (
     RSS_YPAGENCY_ANALYSIS_CATEGORY,
     RSS_YPAGENCY_OCCUPIED_GOVERNORATES_URL,
     RSS_YPAGENCY_OCCUPIED_GOVERNORATES_CATEGORY,
+    RSS_ALITTIHAD_PRESS_URL,
+    RSS_ALITTIHAD_PRESS_CATEGORY,
     RSS_ALJAZEERA_YEMEN_URL,
     RSS_ALJAZEERA_YEMEN_CATEGORY,
     NO_REWRITE_CATEGORIES,
@@ -93,6 +95,8 @@ SELECTED_FEEDS = {
     # فيد قسم "المحافظات المحتلة" بوكالة الصحافة اليمنية — مفعّل، وتُنشر
     # أخباره بقسم "أخبار وتقارير" ثابتاً.
     RSS_YPAGENCY_OCCUPIED_GOVERNORATES_URL: RSS_YPAGENCY_OCCUPIED_GOVERNORATES_CATEGORY,
+    # فيد الاتحاد برس — مفعّل، وتُنشر أخباره بقسم "أخبار وتقارير" ثابتاً.
+    RSS_ALITTIHAD_PRESS_URL: RSS_ALITTIHAD_PRESS_CATEGORY,
     # ⏸️ الجزيرة نت اليمن مستبعد بطلب المستخدم — أعد هذا السطر لتفعيله من جديد:
     # RSS_ALJAZEERA_YEMEN_URL: RSS_ALJAZEERA_YEMEN_CATEGORY,
     # ⏸️ المساء برس مستبعد مؤقتاً — أعد هذا السطر لتفعيله من جديد:
