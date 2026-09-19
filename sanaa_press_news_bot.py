@@ -4016,12 +4016,14 @@ def main():
         selected_feeds = dict(RSS_FEED_CATEGORIES)
     elif extraction_mode == "3":
         selected_feeds = {RSS_MASA_URL: RSS_MASA_CATEGORY}
-    else:  # "1" — استخراج كامل: فيد ypagency (اليمن) الحي + فيد ypagency (عالمية) الحي + فيد ypagency (تقارير) الحي + فيد ypagency (تحليلات) الحي + فيد الجزيرة (اليمن) + فيد المساء برس معاً
+    else:  # "1" — استخراج كامل: فيدات ypagency (اليمن/عالمية/تقارير/تحليلات/
+        # المحافظات المحتلة) + فيد الجزيرة (اليمن) + فيد المساء برس معاً
         selected_feeds = {
             RSS_YPAGENCY_YEMEN_URL: RSS_YPAGENCY_YEMEN_CATEGORY,
             RSS_YPAGENCY_INTL_URL: RSS_YPAGENCY_INTL_CATEGORY,
             RSS_YPAGENCY_REPORTS_URL: RSS_YPAGENCY_REPORTS_CATEGORY,
             RSS_YPAGENCY_ANALYSIS_URL: RSS_YPAGENCY_ANALYSIS_CATEGORY,
+            RSS_YPAGENCY_OCCUPIED_GOVERNORATES_URL: RSS_YPAGENCY_OCCUPIED_GOVERNORATES_CATEGORY,
             RSS_ALJAZEERA_YEMEN_URL: RSS_ALJAZEERA_YEMEN_CATEGORY,
             RSS_MASA_URL: RSS_MASA_CATEGORY,
         }
