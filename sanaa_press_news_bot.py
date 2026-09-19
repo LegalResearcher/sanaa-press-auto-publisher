@@ -117,6 +117,11 @@ RSS_YPAGENCY_REPORTS_CATEGORY = "أخبار وتقارير"
 RSS_YPAGENCY_ANALYSIS_URL = "https://www.ypagency.net/category/%d8%aa%d8%ad%d9%84%d9%8a%d9%84%d8%a7%d8%aa/feed"
 RSS_YPAGENCY_ANALYSIS_CATEGORY = "أخبار وتقارير"
 
+# رابط RSS الحي لقسم "المحافظات المحتلة" بوكالة الصحافة اليمنية —
+# تُنشر أخباره تلقائياً ضمن قسم "أخبار وتقارير" في صنعاء برس.
+RSS_YPAGENCY_OCCUPIED_GOVERNORATES_URL = "https://www.ypagency.net/category/%d8%a7%d9%84%d9%85%d8%ad%d8%a7%d9%81%d8%b8%d8%a7%d8%aa-%d8%a7%d9%84%d9%85%d8%ad%d8%aa%d9%84%d8%a9/feed"
+RSS_YPAGENCY_OCCUPIED_GOVERNORATES_CATEGORY = "أخبار وتقارير"
+
 # رابط RSS الحي العام لموقع الجزيرة نت (aljazeera.net) — نفس منطق ypagency
 # بالسحب والاستخراج الكامل، لكن يفتح كل رابط فعلياً عبر extract_article ليجلب
 # النص الكامل من صفحة الخبر نفسها.
