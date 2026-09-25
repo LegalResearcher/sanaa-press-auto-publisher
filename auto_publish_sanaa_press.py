@@ -360,13 +360,13 @@ def run():
                 record["title"], record["created_at"],
                 embedding=it.get("_title_embedding"),
                 content_embedding=it.get("_content_embedding"),
-                entities=it.get("_dedup_entities"),
+                entities=it.get("_entities"),
             )
             save_published_title_to_db(
                 record["title"], record["created_at"],
                 embedding=it.get("_title_embedding"),
                 content_embedding=it.get("_content_embedding"),
-                entities=it.get("_dedup_entities"),
+                entities=it.get("_entities"),
             )
             save_blocked_link(it["link"])  # منع إعادة النشر مستقبلاً حتى لو حُذف الخبر من الموقع
             seed_views(post_id)
