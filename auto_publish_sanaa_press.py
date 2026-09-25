@@ -37,6 +37,7 @@ from sanaa_press_news_bot import (
     FEATURED_SLIDER_CATEGORIES,
     DEFAULT_OPINION_AUTHOR,
     get_category_id,
+    get_published_post_by_source_url,
     check_system_logs_size,
     check_and_notify_scheduled_posts,
     get_existing_source_urls,
@@ -54,6 +55,7 @@ from sanaa_press_news_bot import (
     rewrite_article,
     rewrite_title_only,
     get_post_image_url,
+    update_published_post_cover_image,
     format_content_paragraphs,
     make_slug,
     get_or_create_author_id,
@@ -72,6 +74,7 @@ from telegram_source import (
     commit_telegram_cursor,
     download_telegram_photo,
     fetch_telegram_items,
+    merge_photo_replies_with_news_items,
 )
 
 # ══════════════════════════════════════════════════════════════════════
@@ -135,6 +138,84 @@ def _is_blocked_auto_topic(it: dict) -> bool:
     return any(kw in text for kw in BLOCKED_AUTO_TOPIC_KEYWORDS)
 
 
+def _process_late_telegram_photo_replies(photo_replies: list[dict]) -> bool:
+    """Attach reply photos to already-published articles without republishing.
+
+    Returns True when a transient failure requires the Telegram cursor to stay
+    put so the same reply is retried on the next run.
+    """
+    retry_required = False
+    for reply in photo_replies:
+        source_url = reply.get("link")
+        try:
+            published_post = get_published_post_by_source_url(source_url)
+        except Exception as error:
+            log.error(
+                "❌ تعذّر العثور على خبر Telegram لربط صورة الرد (%s)؛ ستعاد المحاولة.",
+                type(error).__name__,
+            )
+            retry_required = True
+            continue
+
+        if not published_post:
+            log.info(
+                "ℹ️ صورة رد Telegram للمنشور %s لم تُرفق لأن الخبر الأصلي غير منشور في الموقع.",
+                reply.get("_telegram_reply_to_message_id"),
+            )
+            continue
+
+        try:
+            source_image = download_telegram_photo(reply["_telegram_photo_file_id"])
+        except TelegramFileTooLargeError as error:
+            log.warning("⚠️ صورة رد Telegram أكبر من حد التنزيل؛ لن تُرفق: %s", error)
+            continue
+        except Exception as error:
+            log.error(
+                "❌ تعذّر تنزيل صورة رد Telegram؛ ستعاد المحاولة (%s).",
+                type(error).__name__,
+            )
+            retry_required = True
+            continue
+
+        try:
+            image_url, _ = get_post_image_url(
+                None,
+                headline_text=published_post.get("title"),
+                source_image_bytes=source_image,
+            )
+        except Exception as error:
+            log.error(
+                "❌ تعذّرت معالجة صورة رد Telegram؛ ستعاد المحاولة (%s).",
+                type(error).__name__,
+            )
+            retry_required = True
+            continue
+        if not image_url:
+            log.warning(
+                "⚠️ لم تنتج معالجة صورة رد Telegram غلافًا؛ سيبقى الخبر بلا تغيير."
+            )
+            continue
+
+        try:
+            updated = update_published_post_cover_image(published_post["id"], image_url)
+        except Exception as error:
+            log.error(
+                "❌ تعذّر تحديث صورة الخبر المنشور من رد Telegram؛ ستعاد المحاولة (%s).",
+                type(error).__name__,
+            )
+            retry_required = True
+            continue
+        if not updated:
+            log.error("❌ لم يُؤكَّد تحديث غلاف خبر Telegram؛ ستعاد المحاولة.")
+            retry_required = True
+            continue
+        log.info(
+            "✅ أُلحقت صورة رد Telegram بالخبر المنشور «%s».",
+            published_post.get("title", "")[:70],
+        )
+    return retry_required
+
+
 def run():
     log.info("═" * 60)
     log.info("  📰  صنعاء برس — تشغيل تلقائي (وكالة الصحافة اليمنية ypagency فقط)")
@@ -153,8 +234,15 @@ def run():
 
     telegram_cursor = None
     telegram_source_error = None
+    telegram_retry_required = False
     try:
         telegram_items, telegram_cursor = fetch_telegram_items()
+        telegram_items, photo_replies = merge_photo_replies_with_news_items(
+            telegram_items,
+            existing_source_urls=existing_urls | blocked_links,
+        )
+        if photo_replies:
+            telegram_retry_required = _process_late_telegram_photo_replies(photo_replies)
         log.info(f"📨 منشورات تيليجرام الجديدة من قناة صنعاء برس: {len(telegram_items)}")
     except Exception as exc:
         telegram_items = []
@@ -162,7 +250,7 @@ def run():
         log.error(f"❌ تعذّر جلب منشورات قناة Telegram المصدر: {exc}")
 
     def finalize_telegram_poll(retry_required: bool = False) -> None:
-        if telegram_cursor is not None and not retry_required:
+        if telegram_cursor is not None and not (retry_required or telegram_retry_required):
             commit_telegram_cursor(telegram_cursor)
         if telegram_source_error:
             raise RuntimeError("Telegram source polling failed; see the logged error above.") from telegram_source_error
@@ -221,8 +309,6 @@ def run():
         return
 
     ok = fail = skipped = duplicate_count = 0
-    telegram_retry_required = False
-
     for it in new_items:
         post_category = it["category"]
         is_opinion = post_category in NO_REWRITE_CATEGORIES
