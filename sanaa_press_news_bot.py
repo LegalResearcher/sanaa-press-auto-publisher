@@ -1663,6 +1663,9 @@ def apply_full_extraction(items: list[dict]) -> None:
     قسم أخبار المساء لا يُمس إطلاقاً ويبقى كما اختاره المستخدم عند التشغيل."""
     total = len(items)
     for idx, it in enumerate(items, start=1):
+        if it.get("_telegram_source"):
+            log.info("  🧲 [Telegram] استخدام نص المنشور الخام؛ لا يُفتح رابط القناة الخاصة للاستخراج.")
+            continue
         log.info(f"  🧲 [{idx}/{total}] استخراج الخبر الكامل: {it['link'][:80]}")
         result = extract_article(it["link"])
         body_ok = bool(result and result.get("body") and len(result["body"]) >= MIN_ACCEPTABLE_LOCAL_LEN)
@@ -3131,28 +3134,33 @@ def image_contains_blocked_logo(raw_bytes: bytes) -> bool:
 def get_post_image_url(
     source_image_url: Optional[str], article_url: Optional[str] = None,
     apply_watermark: bool = False, headline_text: Optional[str] = None,
+    source_image_bytes: Optional[bytes] = None,
 ) -> tuple[Optional[str], Optional[str]]:
-    """يدير خط أنابيب الصورة كاملاً: تحميل → معالجة/ضغط → رفع إلى Supabase.
+    """يدير خط أنابيب الصورة كاملاً: تنزيل رابط/استلام بايتات → معالجة/ضغط → رفع.
     يرجّع (رابط الصورة الرئيسية, رابط النسخة المربّعة) — أي منهما None عند
     أي فشل (بدون إيقاف تشغيل البوت). النسخة المربّعة تُنتج فقط لو
     GENERATE_SQUARE_IMAGE_VARIANT مفعّلة، ومن نفس البايتات المحمّلة (بدون
     طلب شبكة إضافي).
     لو الفيد ما زوّد رابط صورة إطلاقاً (source_image_url فارغ) ومُرِّر article_url،
-    يُحاول جلب og:image من صفحة الخبر نفسها كخط احتياطي أخير.
+    يُحاول جلب og:image من صفحة الخبر نفسها كخط احتياطي أخير. يمكن تمرير صورة
+    Telegram الجاهزة عبر source_image_bytes لتدخل خط المعالجة نفسه دون فتح رابط خاص.
     لو apply_watermark=True: تُلصق علامة الجنوب فويس المائية على الصورة
     الرئيسية قبل الضغط والرفع (نفس منطق imageWatermark.ts بالموقع تماماً)
     — النسخة المربّعة تبقى دائماً بدون علامة مائية (مخصصة لـ thumbnails فقط)."""
-    if not source_image_url and article_url:
+    if source_image_bytes is None and not source_image_url and article_url:
         log.info("  ℹ️  لا يوجد رابط صورة بالفيد — محاولة جلبها من صفحة الخبر مباشرة (og:image)...")
         source_image_url = fetch_og_image(article_url)
 
-    if not source_image_url:
+    if source_image_bytes is None and not source_image_url:
         log.info("  ℹ️  لا يوجد رابط صورة بهذا الخبر — سيُترك حقل image_url فارغاً.")
         return None, None
 
-    log.info(f"  🔗 رابط الصورة الأصلي: {source_image_url[:90]}")
-
-    raw_bytes = download_image_bytes(source_image_url)
+    if source_image_bytes is not None:
+        log.info("  🖼️  استخدام بايتات صورة Telegram ضمن خط معالجة صور صنعاء برس.")
+        raw_bytes = source_image_bytes
+    else:
+        log.info(f"  🔗 رابط الصورة الأصلي: {source_image_url[:90]}")
+        raw_bytes = download_image_bytes(source_image_url)
     if not raw_bytes:
         log.warning("  ⚠️  تعذّر تحميل الصورة — سيُترك حقل image_url فارغاً.")
         return None, None

@@ -27,10 +27,20 @@ jobs:
       - name: تثبيت المكتبات
         run: pip install -r requirements.txt
 
+      - name: إخفاء معرّف قناة المصدر من السجلات
+        env:
+          TELEGRAM_SOURCE_CHAT_ID: ${{ vars.TELEGRAM_SOURCE_CHAT_ID || secrets.TELEGRAM_SOURCE_CHAT_ID }}
+        run: |
+          if [ -n "$TELEGRAM_SOURCE_CHAT_ID" ]; then
+            echo "::add-mask::$TELEGRAM_SOURCE_CHAT_ID"
+          fi
+
       - name: تشغيل بوت النشر
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_SOURCE_BOT_TOKEN: ${{ secrets.TELEGRAM_SOURCE_BOT_TOKEN }}
+          TELEGRAM_SOURCE_CHAT_ID: ${{ vars.TELEGRAM_SOURCE_CHAT_ID || secrets.TELEGRAM_SOURCE_CHAT_ID }}
           GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
         run: python auto_publish_sanaa_press.py

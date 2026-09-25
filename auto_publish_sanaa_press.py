@@ -67,6 +67,12 @@ from sanaa_press_news_bot import (
     word_stats,
     extract_keywords,
 )
+from telegram_source import (
+    TelegramFileTooLargeError,
+    commit_telegram_cursor,
+    download_telegram_photo,
+    fetch_telegram_items,
+)
 
 # ══════════════════════════════════════════════════════════════════════
 #  🔒 نسخة تلقائية — تعمل فقط على المصادر التي لا تحتاج تحديث ملفات XML
@@ -145,7 +151,24 @@ def run():
     # بنفسها وترجّع قائمة فارغة عند أي مشكلة.
     recent_published = get_recent_published_titles(hours=24) + get_recent_published_titles_from_db(hours=24)
 
+    telegram_cursor = None
+    telegram_source_error = None
+    try:
+        telegram_items, telegram_cursor = fetch_telegram_items()
+        log.info(f"📨 منشورات تيليجرام الجديدة من قناة صنعاء برس: {len(telegram_items)}")
+    except Exception as exc:
+        telegram_items = []
+        telegram_source_error = exc
+        log.error(f"❌ تعذّر جلب منشورات قناة Telegram المصدر: {exc}")
+
+    def finalize_telegram_poll(retry_required: bool = False) -> None:
+        if telegram_cursor is not None and not retry_required:
+            commit_telegram_cursor(telegram_cursor)
+        if telegram_source_error:
+            raise RuntimeError("Telegram source polling failed; see the logged error above.") from telegram_source_error
+
     items = collect_recent_items(SELECTED_FEEDS)
+    items.extend(telegram_items)
     new_items = [
         it for it in items
         if it["link"] not in existing_urls and it["link"] not in blocked_links
@@ -163,6 +186,7 @@ def run():
 
     if not new_items:
         log.info("لا يوجد أخبار جديدة حالياً.")
+        finalize_telegram_poll()
         return
 
     log.info(f"🧲 استخراج النص الكامل لكل خبر من صفحته ({len(new_items)} خبر)...")
@@ -185,6 +209,7 @@ def run():
 
     if not new_items:
         log.info("لا يوجد أخبار جديدة حالياً بعد الاستبعاد.")
+        finalize_telegram_poll()
         return
 
     # طبقة حصاد اليوم: بعد استخراج المتن الكامل، افحص التشابه الدلالي للمحتوى
@@ -192,9 +217,11 @@ def run():
     new_items = remove_content_duplicate_news(new_items, history_items=recent_published)
     if not new_items:
         log.info("لا يوجد أخبار جديدة حالياً بعد فحص تشابه المحتوى.")
+        finalize_telegram_poll()
         return
 
     ok = fail = skipped = duplicate_count = 0
+    telegram_retry_required = False
 
     for it in new_items:
         post_category = it["category"]
@@ -213,10 +240,14 @@ def run():
                 rewritten = rewrite_article(it["title"], it["raw_body"], post_category)
             except Exception as e:
                 log.error(f"  ❌ فشلت إعادة الصياغة: {e}")
+                if it.get("_telegram_source"):
+                    telegram_retry_required = True
                 fail += 1
                 continue
 
             if not rewritten:
+                if it.get("_telegram_source"):
+                    telegram_retry_required = True
                 skipped += 1
                 continue
 
@@ -246,6 +277,8 @@ def run():
         # النشر، وإلا يُتخطى الخبر (بدل نشره بلا قسم فيختفي من كل الموقع).
         category_id = get_category_id(post_category)
         if not category_id:
+            if it.get("_telegram_source"):
+                telegram_retry_required = True
             fail += 1
             continue
 
@@ -254,14 +287,28 @@ def run():
             image_url = None
             image_url_square = None
         else:
+            telegram_image_bytes = None
+            if it.get("_telegram_photo_file_id"):
+                try:
+                    telegram_image_bytes = download_telegram_photo(it["_telegram_photo_file_id"])
+                except TelegramFileTooLargeError as exc:
+                    log.warning(f"  ⚠️  {exc} سيُنشر الخبر النصي دون صورة.")
+                except Exception as exc:
+                    log.error(f"  ❌ تعذّر تنزيل صورة منشور Telegram؛ سيُعاد الخبر في التشغيل التالي: {exc}")
+                    telegram_retry_required = True
+                    fail += 1
+                    continue
+
             # 🖼️ صورة الخبر الأصلية من المصدر (RSS) — استُخرجت مسبقاً وقت
             # جلب الفيد عبر extract_image_url() وخُزّنت بـit["image_url"].
             # لو فارغة: get_post_image_url تجرب og:image من صفحة الخبر (it["link"])
             # كخط احتياطي قبل الاستسلام.
+            is_remote_feed = str(it.get("source_feed", "")).startswith(("http://", "https://"))
             image_url, image_url_square = get_post_image_url(
                 it.get("image_url"),
                 headline_text=final_title,
-                article_url=it.get("link"),
+                article_url=it.get("link") if is_remote_feed else None,
+                source_image_bytes=telegram_image_bytes,
             )
 
         # ✅ نفس منطق sanaa_press_news_bot.py الرئيسي: word_count/reading_time
@@ -330,11 +377,14 @@ def run():
 
             log_discovery_ready([canonical_url])
         else:
+            if it.get("_telegram_source"):
+                telegram_retry_required = True
             fail += 1
 
     log.info("═" * 60)
     log.info(f"📊 نُشر: {ok} / فشل: {fail} / تُخُطّي: {skipped} / مكرر (قاعدة البيانات): {duplicate_count}")
     log.info("═" * 60)
+    finalize_telegram_poll(retry_required=telegram_retry_required)
 
 
 def _acquire_lock_or_exit():
