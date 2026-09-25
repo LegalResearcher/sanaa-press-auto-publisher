@@ -1799,72 +1799,148 @@ def remove_duplicate_news(
     return kept
 
 
-# طبقة مطابقة متن الخبر، وفق منطق حصاد اليوم: تشابه دلالي للمحتوى مع كيان
-# مشترك وتقارب زمني، لتغطية الحالات التي تُعاد فيها صياغة العنوان بشكل كبير.
+# ══════════════════════════════════════════════════════════════════════
+#  🥉 طبقة ثالثة إضافية لكشف التكرار: تشابه دلالي على مقدمة المحتوى
+#  (أول ~400 حرف من raw_body)، بعتبة أخف من طبقة العنوان، مقترنة إلزامياً
+#  بفحص "كيان مشترك" (جهة/شخصية معروفة تظهر بالخبرين) ونافذة زمنية أضيق.
+#
+#  لماذا هذه الطبقة مختلفة عن الطبقتين السابقتين؟
+#  الطبقة الأولى (raw_body كامل) تمسك النسخ الحرفي/شبه الحرفي.
+#  الطبقة الثانية (عنوان دلالي) تمسك إعادة الصياغة القريبة للعنوان نفسه.
+#  لكن فيه حالة تفلت من الاثنين: خبرين مكتوبين باستقلالية كاملة (كل موقع
+#  بأسلوبه من الصفر، عنواناً ومتناً) عن نفس التصريح/الحدث — مثال: "صنعاء
+#  تلوح بمعادلة الحصار" مقابل "وزير الدفاع: القوات جاهزة لفرض معادلات
+#  ردع"، نفس تصريح وزير الدفاع لكن زاويتان وصياغتان مختلفتان بالكامل من
+#  أول كلمة. هنا لا نص متطابق ولا عنوان متشابه، لكن **المحتوى** يتقاطع
+#  معنوياً و**نفس الجهة/الشخصية** مذكورة بالخبرين.
+#
+#  اشتراط الكيان المشترك تحديداً هو ما يسمح باستخدام عتبة أخف من طبقة
+#  العنوان (0.80 بدل 0.93) دون رفع خطر حذف خبرين مختلفين فعلياً بالخطأ.
+# ══════════════════════════════════════════════════════════════════════
+
 CONTENT_DUPLICATE_EMBEDDING_THRESHOLD = 0.80
-CONTENT_DUPLICATE_TIME_WINDOW_MINUTES = 180
-KNOWN_DEDUP_ENTITIES = (
-    "صنعاء", "اليمن", "السعودية", "التحالف", "إسرائيل", "غزة", "الضفة",
-    "إيران", "أمريكا", "واشنطن", "ترامب", "مأرب", "عدن", "الحديدة",
-    "مضيق هرمز", "البحر الأحمر", "مجلس الأمن", "إنفانتينو", "ميسي",
-)
+CONTENT_DUPLICATE_TIME_WINDOW_MINUTES = 180   # نافذة أضيق من طبقة العنوان (3 ساعات) لتقليل مخاطر الحذف الخاطئ
+CONTENT_EMBEDDING_CHARS = 400                  # أول ~400 حرف من raw_body تكفي لالتقاط جوهر الخبر دون إبطاء الطلب
+
+# قائمة كيانات قابلة للتوسعة يدوياً — أضف/عدّل حسب الجهات المتكررة في
+# تغطيتك (سياسية، عسكرية، شخصيات). المطابقة نصية بسيطة (substring) بعد
+# نفس تطبيع العناوين المستخدم بالطبقة الثانية.
+KNOWN_ENTITIES = [
+    "المجلس السياسي الأعلى",
+    "التحالف بقيادة السعودية",
+    "الحكومة المعترف بها دولياً",
+    "الحاكم العسكري السعودي الشهراني",
+    "وزارة الدفاع",
+    "وزير الدفاع",
+    "القوات المسلحة",
+    "العاطفي",
+    "عبدالملك الحوثي",
+    "بدرالدين الحوثي",
+    "قائد الثورة",
+    "التحالف السعودي",
+    "الحصار",
+    "مطار صنعاء",
+]
 
 
-def _extract_dedup_entities(text: str) -> set[str]:
-    normalized = _normalize_title_for_dedup(text)
-    return {
-        _normalize_title_for_dedup(entity)
-        for entity in KNOWN_DEDUP_ENTITIES
-        if _normalize_title_for_dedup(entity) in normalized
-    }
+def _extract_entities(text: str) -> set:
+    """يستخرج أي كيانات معروفة (من KNOWN_ENTITIES) موجودة بالنص، بعد نفس
+    تطبيع العناوين المستخدم بالطبقة الدلالية الثانية، لضمان اتساق المطابقة
+    (إزالة تشكيل، توحيد الهمزات...)."""
+    norm = _normalize_title_for_dedup(text)
+    found = set()
+    for entity in KNOWN_ENTITIES:
+        norm_entity = _normalize_title_for_dedup(entity)
+        if norm_entity and norm_entity in norm:
+            found.add(norm_entity)
+    return found
 
 
 def get_content_embedding(raw_body: str) -> Optional[list[float]]:
-    return get_title_embedding((raw_body or "")[:4000]) if raw_body else None
+    """يجيب embedding لمقدمة متن الخبر (أول CONTENT_EMBEDDING_CHARS حرف من
+    raw_body)، بنفس آلية get_title_embedding (تدوير مفاتيح Gemini)، لكن
+    على نص المحتوى بدل العنوان — يُستخدم بطبقة كشف التكرار الثالثة."""
+    snippet = (raw_body or "").strip()[:CONTENT_EMBEDDING_CHARS]
+    return get_title_embedding(snippet)
 
 
 def remove_content_duplicate_news(
-    items: list[dict], history_items: Optional[list[dict]] = None,
+    items: list[dict],
+    embedding_threshold: float = CONTENT_DUPLICATE_EMBEDDING_THRESHOLD,
+    time_window_minutes: int = CONTENT_DUPLICATE_TIME_WINDOW_MINUTES,
+    history_items: Optional[list[dict]] = None,
 ) -> list[dict]:
-    kept_items: list[dict] = []
+    """طبقة ثالثة (بعد raw-text وbعد عنوان دلالي): تستبعد خبراً لو تحققت
+    **كل** الشروط الثلاثة معاً مقارنة بخبر آخر (بنفس الدفعة أو من السجل
+    المحلي):
+      1) تشابه دلالي على مقدمة المحتوى ≥ embedding_threshold (0.80)
+      2) كيان معروف واحد على الأقل مشترك بين الخبرين (KNOWN_ENTITIES)
+      3) تقارب زمني ضمن time_window_minutes (3 ساعات افتراضياً)
+
+    اشتراط الكيان المشترك تحديداً هو ما يسمح باستخدام عتبة أخف من طبقة
+    العنوان (0.80 بدل 0.93) دون رفع خطر حذف خبرين مختلفين فعلياً بالخطأ."""
+    kept: list[dict] = []
     kept_embeddings: list[Optional[list[float]]] = []
-    kept_entities: list[set[str]] = []
-    kept_dates: list[Optional[datetime]] = []
-    for history in history_items or []:
-        kept_embeddings.append(history.get("content_embedding"))
-        kept_entities.append(set(history.get("entities") or []))
-        kept_dates.append(history.get("pub_date"))
-    history_count = len(kept_dates)
-    time_window = timedelta(minutes=CONTENT_DUPLICATE_TIME_WINDOW_MINUTES)
-    for item in items:
-        body = item.get("raw_body", "")
-        entities = _extract_dedup_entities(f"{item.get('title', '')} {body}")
-        embedding = get_content_embedding(body) if entities else None
-        item["_content_embedding"] = embedding
-        item["_dedup_entities"] = list(entities)
-        duplicate = False
-        pub_date = item.get("pub_date")
-        if embedding and entities and pub_date is not None:
-            for index, existing_date in enumerate(kept_dates):
-                if existing_date is None or abs(pub_date - existing_date) > time_window:
+    kept_entities: list[set] = []
+    kept_pub_dates: list[Optional[datetime]] = []
+    time_window = timedelta(minutes=time_window_minutes)
+
+    for h in (history_items or []):
+        pub_date = h.get("pub_date")
+        emb = h.get("content_embedding")
+        entities = set(h.get("entities") or [])
+        if pub_date is not None:
+            kept_embeddings.append(emb)
+            kept_entities.append(entities)
+            kept_pub_dates.append(pub_date)
+
+    history_count = len(kept_pub_dates)
+
+    for it in items:
+        raw_body = it.get("raw_body", "")
+        title = it.get("title", "")
+        pub_date = it.get("pub_date")
+        entities = _extract_entities(f"{title} {raw_body}")
+        emb = get_content_embedding(raw_body) if (raw_body and entities) else None
+        # لا داعي لطلب embedding لو مفيش أي كيان معروف بالنص أصلاً —
+        # الشرط الثاني (كيان مشترك) هيفشل حتماً فمفيش فايدة من الطلب.
+        it["_content_embedding"] = emb
+        it["_entities"] = list(entities)
+
+        is_dup = False
+        if emb and entities and pub_date is not None:
+            for i in range(len(kept_pub_dates)):
+                existing_pub_date = kept_pub_dates[i]
+                existing_emb = kept_embeddings[i]
+                existing_entities = kept_entities[i]
+                if existing_pub_date is None or not existing_emb or not existing_entities:
                     continue
-                if not (entities & kept_entities[index]):
+                if abs(pub_date - existing_pub_date) > time_window:
                     continue
-                existing_embedding = kept_embeddings[index]
-                if existing_embedding and _cosine_similarity(embedding, existing_embedding) >= CONTENT_DUPLICATE_EMBEDDING_THRESHOLD:
-                    duplicate = True
-                    source = "منشور سابقاً" if index < history_count else "بنفس الدفعة"
-                    log.info(f"  🔁 استبعاد تكرار متن الخبر ({source}): {item.get('title', '')[:70]}")
+                shared = entities & existing_entities
+                if not shared:
+                    continue
+                sim = _cosine_similarity(emb, existing_emb)
+                if sim >= embedding_threshold:
+                    is_dup = True
+                    source = "منشور سابقاً" if i < history_count else "بنفس الدفعة"
+                    log.info(
+                        f"  🔁🥉 خبر مكرر (تشابه محتوى {sim:.0%} + كيان مشترك "
+                        f"[{', '.join(list(shared)[:2])}]، {source}) تم استبعاده: {title[:70]}"
+                    )
                     break
-        if duplicate:
+
+        if is_dup:
             continue
-        kept_items.append(item)
-        kept_embeddings.append(embedding)
+        kept.append(it)
+        kept_embeddings.append(emb)
         kept_entities.append(entities)
-        kept_dates.append(pub_date)
-    if len(kept_items) < len(items):
-        log.info(f"🧹 استُبعد {len(items) - len(kept_items)} خبر مكرر اعتماداً على متن الخبر.")
-    return kept_items
+        kept_pub_dates.append(pub_date)
+
+    removed = len(items) - len(kept)
+    if removed:
+        log.info(f"🧹🥉 [تشابه محتوى] تم استبعاد {removed} خبر مكرر (كيان مشترك + تشابه معنوي).")
+    return kept
 
 
 # ══════════════════════════════════════════════════════════════════════
