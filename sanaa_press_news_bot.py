@@ -1735,12 +1735,41 @@ def _normalize_title_for_dedup(title: str) -> str:
     return t
 
 
+def _preserve_duplicate_telegram_media(
+    item: dict,
+    match_index: int,
+    history_count: int,
+    kept: list[dict],
+    kept_titles: list[str],
+    duplicates_out: Optional[list[dict]],
+) -> None:
+    """Keep Telegram media when a duplicate article is omitted."""
+    media_keys = ("_telegram_photo_file_id", "_telegram_video_url")
+    if match_index < history_count:
+        if duplicates_out is not None and any(item.get(key) for key in media_keys):
+            duplicate = dict(item)
+            duplicate["_duplicate_match_title"] = kept_titles[match_index]
+            duplicates_out.append(duplicate)
+        return
+    target = kept[match_index - history_count]
+    target["_telegram_media_source"] = True
+    for key in media_keys:
+        if item.get(key):
+            target[key] = item[key]
+    if item.get("_telegram_update_id"):
+        target["_telegram_update_id"] = max(
+            int(target.get("_telegram_update_id") or 0),
+            int(item["_telegram_update_id"]),
+        )
+
+
 def remove_duplicate_news(
     items: list[dict],
     threshold: float = DUPLICATE_TITLE_THRESHOLD,
     embedding_threshold: float = DUPLICATE_EMBEDDING_THRESHOLD,
     time_window_minutes: int = DUPLICATE_TIME_WINDOW_MINUTES,
     history_items: Optional[list[dict]] = None,
+    duplicates_out: Optional[list[dict]] = None,
 ) -> list[dict]:
     """يستبعد الأخبار المكررة (نفس الحدث من أكثر من مصدر) بشرطين معاً:
     تشابه دلالي مرتفع جداً بين متجهي العنوانين (Gemini embedding) + تقارب
@@ -1760,6 +1789,7 @@ def remove_duplicate_news(
     أن يحمل "embedding" (متجه) بجانب "title" و"pub_date"."""
     kept: list[dict] = []
     kept_norm_titles: list[str] = []
+    kept_titles: list[str] = []
     kept_pub_dates: list[Optional[datetime]] = []
     kept_embeddings: list[Optional[list[float]]] = []
     time_window = timedelta(minutes=time_window_minutes)
@@ -1769,6 +1799,7 @@ def remove_duplicate_news(
         pub_date = h.get("pub_date")
         if norm and pub_date is not None:
             kept_norm_titles.append(norm)
+            kept_titles.append(h.get("title", ""))
             kept_pub_dates.append(pub_date)
             kept_embeddings.append(h.get("embedding"))
 
@@ -1805,11 +1836,15 @@ def remove_duplicate_news(
                         f"  🔁 خبر مكرر تم استبعاده (تشابه {method_label} {sim:.0%} + تقارب زمني، {source}): "
                         f"{it.get('title', '')[:70]}"
                     )
+                    _preserve_duplicate_telegram_media(
+                        it, i, history_count, kept, kept_titles, duplicates_out
+                    )
                     break
         if is_dup:
             continue
         kept.append(it)
         kept_norm_titles.append(norm)
+        kept_titles.append(it.get("title", ""))
         kept_pub_dates.append(pub_date)
         kept_embeddings.append(emb)
 
@@ -1889,6 +1924,7 @@ def remove_content_duplicate_news(
     embedding_threshold: float = CONTENT_DUPLICATE_EMBEDDING_THRESHOLD,
     time_window_minutes: int = CONTENT_DUPLICATE_TIME_WINDOW_MINUTES,
     history_items: Optional[list[dict]] = None,
+    duplicates_out: Optional[list[dict]] = None,
 ) -> list[dict]:
     """طبقة ثالثة (بعد raw-text وbعد عنوان دلالي): تستبعد خبراً لو تحققت
     **كل** الشروط الثلاثة معاً مقارنة بخبر آخر (بنفس الدفعة أو من السجل
@@ -1900,6 +1936,7 @@ def remove_content_duplicate_news(
     اشتراط الكيان المشترك تحديداً هو ما يسمح باستخدام عتبة أخف من طبقة
     العنوان (0.80 بدل 0.93) دون رفع خطر حذف خبرين مختلفين فعلياً بالخطأ."""
     kept: list[dict] = []
+    kept_titles: list[str] = []
     kept_embeddings: list[Optional[list[float]]] = []
     kept_entities: list[set] = []
     kept_pub_dates: list[Optional[datetime]] = []
@@ -1913,6 +1950,7 @@ def remove_content_duplicate_news(
             kept_embeddings.append(emb)
             kept_entities.append(entities)
             kept_pub_dates.append(pub_date)
+            kept_titles.append(h.get("title", ""))
 
     history_count = len(kept_pub_dates)
 
@@ -1948,11 +1986,15 @@ def remove_content_duplicate_news(
                         f"  🔁🥉 خبر مكرر (تشابه محتوى {sim:.0%} + كيان مشترك "
                         f"[{', '.join(list(shared)[:2])}]، {source}) تم استبعاده: {title[:70]}"
                     )
+                    _preserve_duplicate_telegram_media(
+                        it, i, history_count, kept, kept_titles, duplicates_out
+                    )
                     break
 
         if is_dup:
             continue
         kept.append(it)
+        kept_titles.append(title)
         kept_embeddings.append(emb)
         kept_entities.append(entities)
         kept_pub_dates.append(pub_date)
@@ -2458,7 +2500,7 @@ def get_published_post_by_source_url(source_url: str) -> Optional[dict]:
     Telegram التي تصل كرد بعد نشر الخبر). لا يعيد مسودات أو مقالات مجدولة."""
     url = f"{SUPABASE_URL}/rest/v1/{TABLE_NAME}"
     params = {
-        "select": "id,title,status,cover_image",
+        "select": "id,title,status,cover_image,external_video_url",
         "source_url": f"eq.{source_url}",
         "status": "eq.published",
         "limit": "1",
@@ -2473,6 +2515,38 @@ def get_published_post_by_source_url(source_url: str) -> Optional[dict]:
         response.raise_for_status()
     rows = response.json()
     return rows[0] if rows else None
+
+
+def get_published_post_by_title(title: str, hours: int = DUPLICATE_DB_CHECK_WINDOW_HOURS) -> Optional[dict]:
+    """Find the closest published article by normalized title for Telegram media attachment."""
+    normalized = _normalize_title_for_dedup(title)
+    if not normalized:
+        return None
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    url = f"{SUPABASE_URL}/rest/v1/{TABLE_NAME}"
+    params = {
+        "select": "id,title,status,cover_image,external_video_url",
+        "created_at": f"gte.{cutoff}",
+        "status": "eq.published",
+        "order": "created_at.desc",
+        "limit": "500",
+    }
+    response = requests.get(url, headers=sb_headers(), params=params, timeout=REQUEST_TIMEOUT)
+    if response.status_code != 200:
+        log.error("❌ تعذّر البحث عن مقال مطابق لوسائط Telegram [%s]: %s", response.status_code, response.text[:200])
+        response.raise_for_status()
+    best_post = None
+    best_similarity = 0.0
+    for row in response.json():
+        existing_title = row.get("title") or ""
+        existing_normalized = _normalize_title_for_dedup(existing_title)
+        if not existing_normalized:
+            continue
+        similarity = difflib.SequenceMatcher(None, normalized, existing_normalized).ratio()
+        if similarity >= DUPLICATE_TITLE_THRESHOLD and similarity > best_similarity:
+            best_similarity = similarity
+            best_post = row
+    return best_post
 
 
 def update_published_post_cover_image(post_id: str, image_url: str) -> bool:
@@ -2500,6 +2574,33 @@ def update_published_post_cover_image(post_id: str, image_url: str) -> bool:
             response.status_code,
             response.text[:200],
         )
+        return False
+    if response.status_code == 204:
+        return True
+    try:
+        rows = response.json()
+    except ValueError:
+        rows = []
+    return any(str(row.get("id")) == str(post_id) for row in rows or [])
+
+
+def update_published_post_video_url(post_id: str, video_url: str) -> bool:
+    """Update only the external video URL on an existing published article."""
+    url = f"{SUPABASE_URL}/rest/v1/{TABLE_NAME}"
+    params = {"id": f"eq.{post_id}", "select": "id"}
+    payload = {
+        "external_video_url": video_url,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    response = requests.patch(
+        url,
+        headers={**sb_headers(), "Prefer": "return=representation"},
+        params=params,
+        json=payload,
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code not in (200, 204):
+        log.error("❌ فشل تحديث رابط فيديو مقال Telegram [%s]: %s", response.status_code, response.text[:200])
         return False
     if response.status_code == 204:
         return True
@@ -3788,8 +3889,19 @@ def call_with_rotation(prompt_text: str, schema: dict = None) -> str:
             raise
 
 
-def rewrite_article(title: str, body: str, category: str, source_feed: Optional[str] = None) -> Optional[dict]:
+def rewrite_article(
+    title: str,
+    body: str,
+    category: str,
+    source_feed: Optional[str] = None,
+    video_url: Optional[str] = None,
+) -> Optional[dict]:
     prompt = build_prompt(title, body, category, source_feed=source_feed)
+    if video_url:
+        prompt += (
+            "\n\nتنبيه تحريري: يوجد رابط فيديو خارجي مرتبط بالمادة، لكنه بيانات وصفية "
+            "للنشر في حقل مستقل؛ لا تذكر الرابط أو منصة الفيديو في title أو excerpt أو content."
+        )
     raw = call_with_rotation(prompt)
     try:
         import json
