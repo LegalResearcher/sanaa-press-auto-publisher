@@ -137,6 +137,8 @@ RSS_ALITTIHAD_PRESS_CATEGORY = "أخبار وتقارير"
 # تماماً من النشر.
 RSS_ALJAZEERA_YEMEN_URL = "https://www.aljazeera.net/aljazeerarss/a7c186be-1baa-4bd4-9d80-a84db769f779/73d0e1b4-532f-45ef-b135-bfdff8b8cab9"
 RSS_ALJAZEERA_YEMEN_CATEGORY = "أخبار اليمن"
+RSS_YEMNEWS_SPORT_URL = "https://yemnews.net/index.php/sport?format=feed&type=rss"
+RSS_YEMNEWS_SPORT_CATEGORY = "رياضة"
 
 # كلمات محظورة — أي خبر من ملفات XML المحلية يحتوي إحداها (بالعنوان أو النص)
 # يُتجاوز بالكامل: لا يُرسل لـ Gemini، ولا تُعاد صياغته، ولا يُنشر.

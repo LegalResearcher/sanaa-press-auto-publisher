@@ -33,6 +33,8 @@ from sanaa_press_news_bot import (
     RSS_YPAGENCY_OCCUPIED_GOVERNORATES_CATEGORY,
     RSS_ALJAZEERA_YEMEN_URL,
     RSS_ALJAZEERA_YEMEN_CATEGORY,
+    RSS_YEMNEWS_SPORT_URL,
+    RSS_YEMNEWS_SPORT_CATEGORY,
     NO_REWRITE_CATEGORIES,
     NO_IMAGE_CATEGORIES,
     FEATURED_SLIDER_CATEGORIES,
@@ -105,6 +107,9 @@ SELECTED_FEEDS = {
     # فيد قسم "المحافظات المحتلة" بوكالة الصحافة اليمنية — مفعّل، وتُنشر
     # أخباره بقسم "أخبار وتقارير" ثابتاً.
     RSS_YPAGENCY_OCCUPIED_GOVERNORATES_URL: RSS_YPAGENCY_OCCUPIED_GOVERNORATES_CATEGORY,
+    # فيد YemNews الرياضي — يُستخرج الخبر كاملاً ثم يمرر إلى build_prompt
+    # ويُنشر في قسم «رياضة».
+    RSS_YEMNEWS_SPORT_URL: RSS_YEMNEWS_SPORT_CATEGORY,
     # ⏸️ الاتحاد برس مستبعد مؤقتاً من النشر التلقائي — يبقى متاحاً في
     # الوضع اليدوي/الاستخراج الكامل عبر sanaa_press_news_bot.py.
     # ⏸️ الجزيرة نت اليمن مستبعد بطلب المستخدم — أعد هذا السطر لتفعيله من جديد:
@@ -118,8 +123,6 @@ SELECTED_FEEDS = {
 EXCLUDED_AUTO_CATEGORIES = {
     "آراء واتجاهات",
     "أسعار العملات والذهب",
-    # ⏸️ رياضة مستبعد مؤقتاً — احذف هذا السطر لإعادة تفعيله من جديد:
-    "رياضة",
 }
 
 # 🚫 كلمات مفتاحية تستبعد الخبر تلقائياً لو ظهرت بعنوانه أو نصه، بمعزل عن
