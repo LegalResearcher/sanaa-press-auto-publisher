@@ -448,6 +448,7 @@ def run():
                     post_category,
                     source_feed=it.get("source_feed"),
                     video_url=video_url,
+                    telegram_source=bool(it.get("_telegram_source") or it.get("_telegram_media_source")),
                 )
             except Exception as e:
                 log.error(f"  ❌ فشلت إعادة الصياغة: {e}")
