@@ -3989,6 +3989,9 @@ def rewrite_title_only(title: str, body: str) -> Optional[str]:
 def format_content_paragraphs(text: str) -> str:
     """يفصل كل جملة إلى فقرة HTML <p> مستقلة — الموقع يعرض content
     كـ HTML مباشرة (dangerouslySetInnerHTML) ولا يحوّل \\n إلى سطر جديد."""
+    # Gemini قد يعيد فواصل الفقرات بصيغة نصية حرفية (\\n\\n) داخل JSON؛
+    # نحولها أولاً إلى فواصل فعلية حتى لا تظهر للمستخدم كنص مرئي.
+    text = text.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n")
     text = re.sub(r"\s+", " ", text.strip())
     parts = re.split(r"(?<=[.!؟])\s+", text)
     parts = [p.strip() for p in parts if p.strip()]
