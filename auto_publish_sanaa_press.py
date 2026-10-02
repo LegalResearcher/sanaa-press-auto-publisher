@@ -139,9 +139,23 @@ BLOCKED_AUTO_TOPIC_KEYWORDS = [
     "الصرف",
 ]
 
+ALITTIHAD_BLOCKED_TITLE_SUMMARY_PHRASES = (
+    "المتحدث العسكري",
+    "العميد يحيى سريع",
+    "بيان وزارة الخارجية صنعاء",
+)
+
 
 def _is_blocked_auto_topic(it: dict) -> bool:
-    text = f"{it.get('title', '')} {it.get('raw_body', '')}"
+    title = it.get("title") or ""
+    summary = it.get("raw_body") or ""
+    if it.get("source_feed") == RSS_ALITTIHAD_PRESS_URL and any(
+        phrase in title or phrase in summary
+        for phrase in ALITTIHAD_BLOCKED_TITLE_SUMMARY_PHRASES
+    ):
+        return True
+
+    text = f"{title} {summary}"
     return any(kw in text for kw in BLOCKED_AUTO_TOPIC_KEYWORDS)
 
 
@@ -370,7 +384,9 @@ def run():
     blocked_topic_count = sum(1 for it in new_items if _is_blocked_auto_topic(it))
     if blocked_topic_count:
         new_items = [it for it in new_items if not _is_blocked_auto_topic(it)]
-        log.info(f"🚫 استُبعد {blocked_topic_count} خبر (يحتوي كلمة ممنوعة: عاجل/طقس/كهرباء/أذان/ذهب/صرف).")
+        log.info(
+            f"🚫 استُبعد {blocked_topic_count} خبر لمطابقة كلمات/عبارات المنع العامة أو الخاصة بمصدر."
+        )
 
     log.info("─" * 60)
     log.info(f"✅ إجمالي الأخبار الجديدة المؤهلة للنشر: {len(new_items)}")
