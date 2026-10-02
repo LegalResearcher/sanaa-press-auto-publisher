@@ -142,7 +142,7 @@ BLOCKED_AUTO_TOPIC_KEYWORDS = [
 ALITTIHAD_BLOCKED_TITLE_SUMMARY_PHRASES = (
     "المتحدث العسكري",
     "العميد يحيى سريع",
-    "بيان وزارة الخارجية صنعاء",
+    "بيان وزارة الخارجية",
 )
 
 
