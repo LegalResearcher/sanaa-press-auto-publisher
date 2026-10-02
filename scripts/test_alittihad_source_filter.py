@@ -25,6 +25,18 @@ class AlIttihadSourceFilterTests(unittest.TestCase):
                     item[field] = f"نص قبل العبارة {phrase} ونص بعدها"
                     self.assertTrue(publisher._is_blocked_auto_topic(item))
 
+    def test_sanaa_mention_bypasses_alittihad_phrase_filter(self):
+        for phrase in publisher.ALITTIHAD_BLOCKED_TITLE_SUMMARY_PHRASES:
+            for field in ("title", "raw_body"):
+                with self.subTest(phrase=phrase, field=field):
+                    item = {
+                        "source_feed": publisher.RSS_ALITTIHAD_PRESS_URL,
+                        "title": "عنوان عادي",
+                        "raw_body": "ملخص عادي",
+                    }
+                    item[field] = f"صنعاء {phrase} بقية الخبر"
+                    self.assertFalse(publisher._is_blocked_auto_topic(item))
+
     def test_phrases_do_not_block_other_feeds(self):
         for phrase in publisher.ALITTIHAD_BLOCKED_TITLE_SUMMARY_PHRASES:
             with self.subTest(phrase=phrase):

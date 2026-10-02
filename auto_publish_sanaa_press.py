@@ -149,11 +149,14 @@ ALITTIHAD_BLOCKED_TITLE_SUMMARY_PHRASES = (
 def _is_blocked_auto_topic(it: dict) -> bool:
     title = it.get("title") or ""
     summary = it.get("raw_body") or ""
-    if it.get("source_feed") == RSS_ALITTIHAD_PRESS_URL and any(
-        phrase in title or phrase in summary
-        for phrase in ALITTIHAD_BLOCKED_TITLE_SUMMARY_PHRASES
-    ):
-        return True
+    if it.get("source_feed") == RSS_ALITTIHAD_PRESS_URL:
+        source_text = f"{title} {summary}"
+        # Mentions of Sana'a must not be rejected by this source-specific list.
+        if "صنعاء" not in source_text and any(
+            phrase in title or phrase in summary
+            for phrase in ALITTIHAD_BLOCKED_TITLE_SUMMARY_PHRASES
+        ):
+            return True
 
     text = f"{title} {summary}"
     return any(kw in text for kw in BLOCKED_AUTO_TOPIC_KEYWORDS)
