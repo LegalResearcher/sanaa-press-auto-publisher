@@ -47,6 +47,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Optional
+from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup, Tag
@@ -1334,6 +1335,27 @@ def _extract_by_doc_order(h1: Optional[Tag], soup: BeautifulSoup) -> list[str]:
     return paragraphs
 
 
+def _extract_alittihad_body(article_body: Tag, page_title: Optional[str]) -> list[str]:
+    """Extract only leaf paragraphs from Al-Ittihad's articleBody container.
+
+    Its template nests the individual article paragraphs inside one aggregate
+    paragraph, which otherwise duplicates the complete body during extraction.
+    """
+    paragraphs = []
+    for paragraph in article_body.find_all("p"):
+        if paragraph.find("p"):
+            continue
+        text = _clean_text(paragraph.get_text(" ", strip=True))
+        if not text or (page_title and text == page_title):
+            continue
+        if _hits_stop_regex(text) or _text_hits_stop_marker(text):
+            break
+        if _is_noise_line(text) or len(text) < 20:
+            continue
+        paragraphs.append(text)
+    return paragraphs
+
+
 def _is_noise_line(text: str) -> bool:
     """يفحص لو السطر بالكامل يطابق نمط ضجيج معروف. نستخدم re.search (مو
     re.match) لأن بعض الأنماط (مثل فقرة 'عن الصحيفة' بالفوتر) قد لا تبدأ
@@ -1574,7 +1596,21 @@ def extract_article(url: str) -> Optional[dict]:
 
     soup = BeautifulSoup(resp.content, "html.parser")
 
+    is_alittihad_page = (urlparse(url).hostname or "").lower() in {
+        "alittihadpress.com",
+        "www.alittihadpress.com",
+    }
+    if is_alittihad_page:
+        # صفحة الاتحاد برس تعرض الأخبار ذات الصلة في هذا الشريط بعد متن الخبر.
+        for related_block in soup.select(".swiper-container-readAlso"):
+            related_block.decompose()
+
     h1 = soup.find("h1")
+    if h1 is None and is_alittihad_page:
+        # عنوان المقال في صفحات الاتحاد برس يأتي داخل h3 لا h1.
+        h1 = soup.select_one(
+            'div[itemtype="http://schema.org/NewsArticle"] h3.heading-font.fontztitle'
+        )
     title = _clean_text(h1.get_text(strip=True)) if h1 else None
     if ARTICLE_DEBUG:
         print(f"  🔧 العنوان (h1): {title}")
@@ -1598,7 +1634,7 @@ def extract_article(url: str) -> Optional[dict]:
         return d
 
     jsonld_result = _extract_from_jsonld(soup)
-    if jsonld_result:
+    if jsonld_result and not is_alittihad_page:
         if not jsonld_result.get("title"):
             jsonld_result["title"] = title
         return _with_cat(jsonld_result)
@@ -1606,6 +1642,23 @@ def extract_article(url: str) -> Optional[dict]:
     for tag_name in ALWAYS_STRIP_TAGS:
         for t in soup.find_all(tag_name):
             t.decompose()
+
+    if is_alittihad_page:
+        article_body = soup.select_one('[itemprop="articleBody"]')
+        if article_body is not None:
+            paragraphs = _extract_alittihad_body(article_body, title)
+            total_len = sum(len(paragraph) for paragraph in paragraphs)
+            if total_len >= MIN_ACCEPTABLE_LOCAL_LEN:
+                return _with_cat({
+                    "title": title,
+                    "body": "\n\n".join(paragraphs),
+                    "paragraphs": paragraphs,
+                })
+
+    if jsonld_result:
+        if not jsonld_result.get("title"):
+            jsonld_result["title"] = title
+        return _with_cat(jsonld_result)
 
     doc_order_paragraphs = _extract_by_doc_order(h1, soup)
     total_len = sum(len(p) for p in doc_order_paragraphs)
