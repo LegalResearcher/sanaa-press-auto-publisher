@@ -31,6 +31,8 @@ from sanaa_press_news_bot import (
     RSS_YPAGENCY_ANALYSIS_CATEGORY,
     RSS_YPAGENCY_OCCUPIED_GOVERNORATES_URL,
     RSS_YPAGENCY_OCCUPIED_GOVERNORATES_CATEGORY,
+    RSS_ALITTIHAD_PRESS_URL,
+    RSS_ALITTIHAD_PRESS_CATEGORY,
     RSS_ALJAZEERA_YEMEN_URL,
     RSS_ALJAZEERA_YEMEN_CATEGORY,
     RSS_YEMNEWS_SPORT_URL,
@@ -83,18 +85,17 @@ from telegram_source import (
 )
 
 # ══════════════════════════════════════════════════════════════════════
-#  🔒 نسخة تلقائية — تعمل فقط على المصادر التي لا تحتاج تحديث ملفات XML
-#  يدوياً (فيد قسم "اليمن" الحي بوكالة الصحافة اليمنية ypagency.net + فيد
-#  الجزيرة نت اليمن + فيد المساء برس)، بنفس منطق وضع "1" (استخراج الخبر
-#  كاملاً) + الوضع التلقائي (كل خبر بقسمه الخاص) من sanaa_press_news_bot.py
-#  الأصلي، لكن بدون أي تفاعل يدوي (بدون أسئلة استخراج/تصنيف/استثناء/جدولة،
+#  🔒 نسخة تلقائية — تعالج المصادر المحددة في SELECTED_FEEDS أدناه
+#  بنفس منطق وضع "1" (استخراج الخبر كاملاً) والوضع التلقائي (كل خبر بقسمه
+#  الخاص) من sanaa_press_news_bot.py الأصلي، لكن بدون أي تفاعل يدوي
+#  (بدون أسئلة استخراج/تصنيف/استثناء/جدولة،
 #  وبدون طلب كتابة "تأكيد") — تُنشر كل الأخبار فوراً (status=published).
 #  تُشغَّل عبر cron كل عدة دقائق.
 # ══════════════════════════════════════════════════════════════════════
 
 SELECTED_FEEDS = {
-    # فيد قسم "اليمن" فقط بوكالة الصحافة اليمنية — المصدر الوحيد المفعّل
-    # حالياً، وتُنشر كل أخباره بقسم "أخبار وتقارير" ثابتاً
+    # فيد قسم "اليمن" بوكالة الصحافة اليمنية — تُنشر أخباره بقسم
+    # "أخبار وتقارير" ثابتاً
     # (RSS_YPAGENCY_YEMEN_CATEGORY):
     RSS_YPAGENCY_YEMEN_URL: RSS_YPAGENCY_YEMEN_CATEGORY,
     # فيد قسم "عالمية" (دولي) بوكالة الصحافة اليمنية — مفعّل، تُنشر أخباره
@@ -110,8 +111,8 @@ SELECTED_FEEDS = {
     # فيد YemNews الرياضي — يُستخرج الخبر كاملاً ثم يمرر إلى build_prompt
     # ويُنشر في قسم «رياضة».
     RSS_YEMNEWS_SPORT_URL: RSS_YEMNEWS_SPORT_CATEGORY,
-    # ⏸️ الاتحاد برس مستبعد مؤقتاً من النشر التلقائي — يبقى متاحاً في
-    # الوضع اليدوي/الاستخراج الكامل عبر sanaa_press_news_bot.py.
+    # فيد الاتحاد برس — يُستخرج الخبر كاملاً ويُنشر في «أخبار وتقارير».
+    RSS_ALITTIHAD_PRESS_URL: RSS_ALITTIHAD_PRESS_CATEGORY,
     # ⏸️ الجزيرة نت اليمن مستبعد بطلب المستخدم — أعد هذا السطر لتفعيله من جديد:
     # RSS_ALJAZEERA_YEMEN_URL: RSS_ALJAZEERA_YEMEN_CATEGORY,
     # ⏸️ المساء برس مستبعد مؤقتاً — أعد هذا السطر لتفعيله من جديد:
