@@ -4048,6 +4048,19 @@ def call_with_rotation(prompt_text: str, schema: dict = None) -> str:
             raise
 
 
+ALITTIHAD_MIN_REWRITE_RATIO = 0.55
+
+
+def _plain_text_length(value: str) -> int:
+    return len(re.sub(r"<[^>]*>", " ", value or "").strip())
+
+
+def _is_underwritten_alittihad_content(content: str, source_body: str) -> bool:
+    source_len = _plain_text_length(source_body)
+    content_len = _plain_text_length(content)
+    return source_len >= 500 and content_len < source_len * ALITTIHAD_MIN_REWRITE_RATIO
+
+
 def rewrite_article(
     title: str,
     body: str,
@@ -4062,16 +4075,50 @@ def rewrite_article(
         bypass_content_filters=telegram_source,
         video_url=video_url,
     )
+    is_alittihad = source_feed == RSS_ALITTIHAD_PRESS_URL
     if video_url:
         prompt += (
             "\n\nتنبيه تحريري: يوجد رابط فيديو خارجي مرتبط بالمادة، لكنه بيانات وصفية "
             "للنشر في حقل مستقل؛ لا تذكر الرابط أو منصة الفيديو في title أو excerpt أو content."
+        )
+    if is_alittihad:
+        prompt += (
+            "\n\n### قاعدة خاصة بمادة الاتحاد برس — ممنوع الاختصار\n"
+            "المتن المصدر كامل ومحرر مسبقاً. أعد صياغة جميع فقراته ووقائعه وأرقامه "
+            "وتصريحاته دون تحويله إلى ملخص أو خبر قصير. يجب أن يكون content موسعاً "
+            "وقريباً في حجمه من النص المصدر، بينما excerpt وحده هو الملخص القصير. "
+            "لا تحذف أي فقرة لمجرد أنها تفصيلية، ولا تضع ثلاث فقرات عامة بدلاً من المادة الكاملة."
         )
     raw = call_with_rotation(prompt)
     try:
         data = json.loads(raw)
         original_data = data if isinstance(data, dict) else {}
         data = clean_rewrite_payload(data, title, body)
+
+        if is_alittihad and _is_underwritten_alittihad_content(data.get("content", ""), body):
+            log.warning(
+                f"  ⚠️ اختصار غير مقبول من Gemini للاتحاد برس: {title[:60]} — إعادة المحاولة."
+            )
+            retry_prompt = (
+                prompt
+                + "\n\nإعادة تحرير إلزامية: أعد JSON فقط، وأعد كتابة المتن كاملاً فقرة فقرة. "
+                "الناتج السابق كان مختصراً وغير مقبول. لا تلخص ولا تحذف التفاصيل. "
+                "إذا تعذر الحفاظ على كامل الوقائع، انسخ جميع الوقائع من المصدر بصياغة صحفية واضحة."
+            )
+            retry_raw = call_with_rotation(retry_prompt)
+            try:
+                retry_data = clean_rewrite_payload(json.loads(retry_raw), title, body)
+            except Exception:
+                retry_data = {}
+            if retry_data and not _is_underwritten_alittihad_content(retry_data.get("content", ""), body):
+                data = retry_data
+            else:
+                log.warning(
+                    f"  ⚠️ استمر اختصار Gemini للاتحاد برس: {title[:60]} — استخدام المتن الكامل المصدر."
+                )
+                data["content"] = body.strip()
+                data["excerpt"] = _excerpt_from_content(data["content"])
+
         if any(data.get(field) != original_data.get(field) for field in ("title", "excerpt", "content")):
             log.warning(f"  🧹 نُظفت مخرجات غير صحفية واستُعيد النص اللازم عند الحاجة: {title[:60]}")
         if data.get("houthi_iran_exclude") is True:

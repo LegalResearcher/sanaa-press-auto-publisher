@@ -94,6 +94,54 @@ class GeminiResponseSafetyTests(unittest.TestCase):
         self.assertEqual(result["content"], article)
         self.assertNotIn("JSON output", result["content"])
 
+    def test_alittihad_short_rewrite_retries_then_uses_full_source(self):
+        source = "هذه فقرة كاملة عن الخبر وتحتوي على تفاصيل وأسماء وأرقام مهمة. " * 20
+        short = json.dumps({
+            "title": "عنوان محرر",
+            "excerpt": "ملخص",
+            "content": "خبر مختصر جداً.",
+            "houthi_iran_exclude": False,
+        }, ensure_ascii=False)
+        with mock.patch.object(bot, "call_with_rotation", side_effect=[short, short]) as call:
+            result = bot.rewrite_article(
+                "عنوان الاتحاد",
+                source,
+                "أخبار وتقارير",
+                source_feed=bot.RSS_ALITTIHAD_PRESS_URL,
+            )
+
+        self.assertEqual(call.call_count, 2)
+        self.assertEqual(result["content"], source.strip())
+        self.assertGreater(len(result["content"]), 500)
+
+    def test_alittihad_prompt_explicitly_requires_full_content(self):
+        source = "تفاصيل خبر الاتحاد برس." * 200
+        response = json.dumps({
+            "title": "عنوان",
+            "excerpt": "ملخص",
+            "content": source,
+            "houthi_iran_exclude": False,
+        }, ensure_ascii=False)
+        with mock.patch.object(bot, "call_with_rotation", return_value=response) as call:
+            bot.rewrite_article(
+                "عنوان الاتحاد", source, "أخبار وتقارير",
+                source_feed=bot.RSS_ALITTIHAD_PRESS_URL,
+            )
+        self.assertIn("ممنوع الاختصار", call.call_args.args[0])
+        self.assertIn("content موسعاً", call.call_args.args[0])
+
+    def test_other_feeds_keep_existing_short_rewrite_behavior(self):
+        source = "هذه مادة مصدرية طويلة. " * 30
+        response = json.dumps({
+            "title": "عنوان",
+            "excerpt": "ملخص",
+            "content": "نص مختصر.",
+            "houthi_iran_exclude": False,
+        }, ensure_ascii=False)
+        with mock.patch.object(bot, "call_with_rotation", return_value=response):
+            result = bot.rewrite_article("عنوان", source, "أخبار وتقارير", source_feed="https://other.example/feed")
+        self.assertEqual(result["content"], "نص مختصر.")
+
     def test_invalid_model_json_falls_back_to_source_instead_of_skipping_story(self):
         with mock.patch.object(bot, "call_with_rotation", return_value="not-json"):
             result = bot.rewrite_article(
