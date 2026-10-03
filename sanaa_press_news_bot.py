@@ -1267,6 +1267,53 @@ def _clean_text(text: str) -> str:
     return text.strip()
 
 
+def clean_extracted_article_body(
+    body: str,
+    title: Optional[str] = None,
+    known_titles: Optional[set[str]] = None,
+) -> str:
+    """ينظف النص المستخرج قبل تمريره لإعادة الصياغة.
+
+    التنظيف عام ولا يعتمد على اسم مصدر بعينه: يزيل العنوان المكرر،
+    عبارات النسبة/المتابعة الشائعة، الفقرات المكررة، وعناوين الأخبار
+    الجانبية التي تظهر أحياناً في نهاية كتلة الصفحة. لا يقتطع المتن بحسب
+    عدد أحرف ثابت، ولا يحذف فقرة غير معروفة المحتوى.
+    """
+    if not body:
+        return ""
+
+    current_title = _clean_text(title or "")
+    sidebar_titles = {_clean_text(value) for value in (known_titles or set()) if value}
+    paragraphs = [_clean_text(part) for part in re.split(r"\n{2,}", body) if _clean_text(part)]
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    source_prefix = re.compile(
+        r"^(?:الاتحاد برس|وكالة الصحافة اليمنية|متابعات(?: خاصة)?|خاص)\s*[:：-]\s*",
+        re.IGNORECASE,
+    )
+
+    for paragraph in paragraphs:
+        if paragraph == current_title:
+            continue
+        # عناوين الأخبار الأخرى في ويدجت آخر الأخبار، وليست من متن المقال.
+        if paragraph in sidebar_titles and paragraph != current_title:
+            continue
+
+        paragraph = source_prefix.sub("", paragraph).strip()
+        if current_title and paragraph.startswith(current_title):
+            paragraph = paragraph[len(current_title):].lstrip(" -:：")
+        if not paragraph or paragraph == current_title:
+            continue
+
+        key = re.sub(r"\s+", " ", paragraph).strip()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(paragraph)
+
+    return "\n\n".join(cleaned)
+
+
 # أسطر مفردة تُتجاهل (تُتخطى فقط، بدون إيقاف الاستخراج) حتى لو وقعت
 # داخل نطاق المتن — لأنها ليست جزءاً من الخبر نفسه
 NOISE_LINE_PATTERNS = [
@@ -1699,7 +1746,22 @@ def apply_full_extraction(items: list[dict]) -> None:
         body_ok = bool(result and result.get("body") and len(result["body"]) >= MIN_ACCEPTABLE_LOCAL_LEN)
 
         if body_ok:
-            it["raw_body"] = result["body"]
+            if it.get("source_feed") == RSS_ALITTIHAD_PRESS_URL:
+                known_titles = {item.get("title", "") for item in items}
+                cleaned_body = clean_extracted_article_body(
+                    result["body"],
+                    title=it.get("title"),
+                    known_titles=known_titles,
+                )
+                if len(cleaned_body) >= MIN_ACCEPTABLE_LOCAL_LEN:
+                    it["raw_body"] = cleaned_body
+                else:
+                    log.warning(
+                        "  ⚠️  أُهمل تنظيف نص الاتحاد برس لأنه أصبح أقصر من الحد الأدنى — سيُستخدم النص المستخرج."
+                    )
+                    it["raw_body"] = result["body"]
+            else:
+                it["raw_body"] = result["body"]
         else:
             log.warning(
                 f"  ⚠️  تعذّر استخراج الخبر كاملاً لهذا الرابط — سيُستخدم نص RSS "
