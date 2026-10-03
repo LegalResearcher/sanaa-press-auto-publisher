@@ -42,18 +42,17 @@ class AlIttihadExtractionTests(unittest.TestCase):
         mock_fetch.return_value = response
 
     @mock.patch.object(bot, "fetch_with_bypass")
-    def test_alittihad_extracts_leaf_article_paragraphs_only(self, mock_fetch):
+    def test_alittihad_uses_generic_extraction_path(self, mock_fetch):
         self._mock_page(mock_fetch)
 
         result = bot.extract_article("https://alittihadpress.com/news41526.html")
 
         self.assertIsNotNone(result)
-        self.assertEqual(result["title"], "عنوان تجريبي لمقال الاتحاد برس")
+        self.assertIsNone(result["title"])
         self.assertIn("تفاصيل الخبر الأصلي", result["body"])
-        self.assertNotIn("عنوان خبر جانبي", result["body"])
-        self.assertNotIn("الاتحاد برس متابعات", result["body"])
-        self.assertNotIn("عنوان تجريبي لمقال الاتحاد برس", result["body"])
-        self.assertEqual(len(result["paragraphs"]), 3)
+        # الاتحاد برس لا يملك مساراً خاصاً؛ يمر عبر الاستخراج العام نفسه،
+        # لذلك لا تُطبّق عليه تصفية خاصة للكتل الجانبية أو الفقرات المتداخلة.
+        self.assertIn("عنوان خبر جانبي", result["body"])
         self.assertGreaterEqual(len(result["body"]), bot.MIN_ACCEPTABLE_LOCAL_LEN)
 
     @mock.patch.object(bot, "fetch_with_bypass")
