@@ -55,6 +55,26 @@ class AlIttihadExtractionTests(unittest.TestCase):
         self.assertIn("عنوان خبر جانبي", result["body"])
         self.assertGreaterEqual(len(result["body"]), bot.MIN_ACCEPTABLE_LOCAL_LEN)
 
+    def test_alittihad_body_cleaner_removes_repeated_titles_and_sidebars(self):
+        body = "\n\n".join([
+            "عنوان الخبر",
+            "الاتحاد برس متابعات : عنوان الخبر تفاصيل الخبر الكاملة هنا.",
+            "تفاصيل إضافية موثقة.",
+            "خبر جانبي أول",
+            "خبر جانبي ثان",
+        ])
+        cleaned = bot.clean_extracted_article_body(
+            body,
+            title="عنوان الخبر",
+            known_titles={"عنوان الخبر", "خبر جانبي أول", "خبر جانبي ثان"},
+        )
+
+        self.assertNotIn("عنوان الخبر", cleaned.split("\n\n"))
+        self.assertNotIn("خبر جانبي أول", cleaned.split("\n\n"))
+        self.assertNotIn("خبر جانبي ثان", cleaned.split("\n\n"))
+        self.assertIn("تفاصيل الخبر الكاملة هنا", cleaned)
+        self.assertIn("تفاصيل إضافية موثقة", cleaned)
+
     @mock.patch.object(bot, "fetch_with_bypass")
     def test_other_domains_keep_their_existing_extraction_behavior(self, mock_fetch):
         self._mock_page(mock_fetch)
