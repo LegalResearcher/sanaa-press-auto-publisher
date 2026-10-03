@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,6 +55,20 @@ class AlIttihadSourceFilterTests(unittest.TestCase):
             "raw_body": "تفاصيل الخبر لا تتضمن أي عبارة محظورة.",
         }
         self.assertFalse(publisher._is_blocked_auto_topic(item))
+
+    def test_future_alittihad_publish_date_is_clamped_to_now(self):
+        future = datetime.now(timezone.utc) + timedelta(hours=1)
+        normalized = publisher.normalize_publish_date(
+            future, publisher.RSS_ALITTIHAD_PRESS_URL
+        )
+        self.assertLessEqual(normalized, datetime.now(timezone.utc))
+
+    def test_other_feed_publish_date_is_not_changed(self):
+        future = datetime.now(timezone.utc) + timedelta(hours=1)
+        self.assertEqual(
+            publisher.normalize_publish_date(future, publisher.RSS_YPAGENCY_YEMEN_URL),
+            future,
+        )
 
     def test_existing_global_keyword_filter_still_applies(self):
         item = {

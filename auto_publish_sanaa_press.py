@@ -42,6 +42,7 @@ from sanaa_press_news_bot import (
     FEATURED_SLIDER_CATEGORIES,
     DEFAULT_OPINION_AUTHOR,
     get_category_id,
+    normalize_publish_date,
     get_published_post_by_source_url,
     get_published_post_by_title,
     check_system_logs_size,
@@ -510,7 +511,8 @@ def run():
             continue
 
         formatted_content = format_content_paragraphs(final_content)
-        item_date = it["pub_date"].isoformat()
+        publish_dt = normalize_publish_date(it["pub_date"], it.get("source_feed", ""))
+        item_date = publish_dt.isoformat()
 
         # 🗂️ صنعاء برس يخزّن القسم كـ category_id (UUID) — لازم نحله قبل
         # النشر، وإلا يُتخطى الخبر (بدل نشره بلا قسم فيختفي من كل الموقع).
