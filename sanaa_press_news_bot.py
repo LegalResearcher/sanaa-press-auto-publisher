@@ -1112,6 +1112,27 @@ def fetch_yemen_category_page(category: str) -> list[dict]:
     return items
 
 
+def normalize_publish_date(pub_date: datetime, source_feed: str = "") -> datetime:
+    """لا تسمح للاتحاد برس بتسجيل خبر منشور في وقت مستقبلي.
+
+    بعض نسخ RSS لدى الاتحاد برس قد تسبق ساعة النظام أو تستخدم وقتاً
+    مستقبلياً. إبقاء ذلك التاريخ في published_at يجعل واجهة الموقع العامة
+    تخفي الخبر حتى يصل ذلك الوقت، رغم أن حالته published.
+    """
+    if source_feed != RSS_ALITTIHAD_PRESS_URL:
+        return pub_date
+    if pub_date.tzinfo is None:
+        pub_date = pub_date.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    if pub_date > now:
+        log.warning(
+            "  ⚠️ تاريخ الاتحاد برس مستقبلي (%s) — استُخدم وقت النشر الحالي (%s).",
+            pub_date.isoformat(), now.isoformat(),
+        )
+        return now
+    return pub_date
+
+
 def parse_pub_date(pub_date_raw: str, source_url: str = "") -> datetime:
     """
     تحليل تاريخ النشر من مصادر RSS/XML متعددة الصيغ.
@@ -4755,7 +4776,8 @@ def main():
         final_content = cleaned_fields["content"]
 
         formatted_content = format_content_paragraphs(final_content)
-        item_date = it["pub_date"].isoformat()
+        publish_dt = normalize_publish_date(it["pub_date"], it.get("source_feed", ""))
+        item_date = publish_dt.isoformat()
 
         starts_with_ajel = _normalize_ar_for_blocking(it["title"]).lstrip().startswith("عاجل")
 
