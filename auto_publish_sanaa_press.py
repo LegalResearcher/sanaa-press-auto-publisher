@@ -112,8 +112,8 @@ SELECTED_FEEDS = {
     # فيد YemNews الرياضي — يُستخرج الخبر كاملاً ثم يمرر إلى build_prompt
     # ويُنشر في قسم «رياضة».
     RSS_YEMNEWS_SPORT_URL: RSS_YEMNEWS_SPORT_CATEGORY,
-    # فيد الاتحاد برس — يُستخرج الخبر كاملاً ويُنشر في «أخبار وتقارير».
-    RSS_ALITTIHAD_PRESS_URL: RSS_ALITTIHAD_PRESS_CATEGORY,
+    # ⏸️ فيد الاتحاد برس مستبعد مؤقتاً بطلب المستخدم — أعد السطر لتفعيله من جديد:
+    # RSS_ALITTIHAD_PRESS_URL: RSS_ALITTIHAD_PRESS_CATEGORY,
     # ⏸️ الجزيرة نت اليمن مستبعد بطلب المستخدم — أعد هذا السطر لتفعيله من جديد:
     # RSS_ALJAZEERA_YEMEN_URL: RSS_ALJAZEERA_YEMEN_CATEGORY,
     # ⏸️ المساء برس مستبعد مؤقتاً — أعد هذا السطر لتفعيله من جديد:
