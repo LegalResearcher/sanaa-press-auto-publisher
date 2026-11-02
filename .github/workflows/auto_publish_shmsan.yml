@@ -1,8 +1,6 @@
 name: نشر تلقائي - صنعاء برس
 
 on:
-  repository_dispatch:
-    types: [supabase-publish]
   workflow_dispatch: {}   # يسمح بتشغيل يدوي فوري من تبويب Actions للاختبار
   schedule:
     - cron: "7,37 * * * *" # كل 30 دقيقة عند دقيقة غير مستديرة لتقليل الازدحام
